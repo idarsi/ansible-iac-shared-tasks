@@ -1,0 +1,43 @@
+---
+- name: "Checking directory filesystem record"
+  ansible.builtin.assert:
+    that:
+      - iac_fs_directory_record.path is defined
+      - iac_fs_directory_record.selinux is not defined or iac_fs_directory_record.selinux.setype is defined
+    fail_msg: "Directory filesystem record is missing required fields"
+
+- name: "Building SELinux fcontext expression for directory"
+  ansible.builtin.set_fact:
+    iac_fs_selinux_target: >-
+      {{
+        (
+          iac_fs_directory_record.path | regex_escape
+        )
+        ~
+        (
+          '(/.*)?'
+          if (iac_fs_directory_record.selinux.recursive | default(true) | bool)
+          else ''
+        )
+      }}
+  when: iac_fs_directory_record.selinux is defined
+
+- name: "Reading existing custom SELinux fcontext rules for directory"
+  ansible.builtin.command: semanage fcontext -l -C
+  register: iac_fs_selinux_directory_rules
+  changed_when: false
+  when: iac_fs_directory_record.selinux is defined
+
+- name: "Removing SELinux fcontext rule for directory"
+  ansible.builtin.command: >-
+    semanage fcontext
+    -d
+    {{ iac_fs_selinux_target }}
+  when:
+    - iac_fs_directory_record.selinux is defined
+    - iac_fs_selinux_directory_rules.stdout is search('^' ~ (iac_fs_selinux_target | regex_escape) ~ '\\s+', multiline=True)
+
+- name: "Ensuring directory is absent"
+  ansible.builtin.file:
+    path: "{{ iac_fs_directory_record.path }}"
+    state: "absent"

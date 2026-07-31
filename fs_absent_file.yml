@@ -1,0 +1,32 @@
+---
+- name: "Checking file filesystem record"
+  ansible.builtin.assert:
+    that:
+      - iac_fs_file_record.path is defined
+      - iac_fs_file_record.selinux is not defined or iac_fs_file_record.selinux.setype is defined
+    fail_msg: "File filesystem record is missing required fields"
+
+- name: "Building SELinux fcontext expression for file"
+  ansible.builtin.set_fact:
+    iac_fs_selinux_target: "{{ iac_fs_file_record.path | regex_escape }}"
+  when: iac_fs_file_record.selinux is defined
+
+- name: "Reading existing custom SELinux fcontext rules for file"
+  ansible.builtin.command: semanage fcontext -l -C
+  register: iac_fs_selinux_file_rules
+  changed_when: false
+  when: iac_fs_file_record.selinux is defined
+
+- name: "Removing SELinux fcontext rule for file"
+  ansible.builtin.command: >-
+    semanage fcontext
+    -d
+    {{ iac_fs_selinux_target }}
+  when:
+    - iac_fs_file_record.selinux is defined
+    - iac_fs_selinux_file_rules.stdout is search('^' ~ (iac_fs_selinux_target | regex_escape) ~ '\\s+', multiline=True)
+
+- name: "Ensuring file is absent"
+  ansible.builtin.file:
+    path: "{{ iac_fs_file_record.path }}"
+    state: "absent"
