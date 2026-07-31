@@ -1,0 +1,84 @@
+---
+- name: "Checking directory filesystem record"
+  ansible.builtin.assert:
+    that:
+      - iac_fs_directory_record.path is defined
+      - iac_fs_directory_record.selinux is not defined or iac_fs_directory_record.selinux.setype is defined
+    fail_msg: "Directory filesystem record is missing required fields"
+
+- name: "Ensuring directory is present"
+  ansible.builtin.file:
+    path: "{{ iac_fs_directory_record.path }}"
+    state: "{{ iac_fs_directory_record.state | default('directory') }}"
+    owner: "{{ iac_fs_directory_record.owner | default(omit) }}"
+    group: "{{ iac_fs_directory_record.group | default(omit) }}"
+    mode: "{{ iac_fs_directory_record.mode | default(omit) }}"
+
+- name: "Building SELinux fcontext expression for directory"
+  ansible.builtin.set_fact:
+    iac_fs_selinux_target: >-
+      {{
+        (
+          iac_fs_directory_record.path | regex_escape
+        )
+        ~
+        (
+          '(/.*)?'
+          if (iac_fs_directory_record.selinux.recursive | default(true) | bool)
+          else ''
+        )
+      }}
+  when: iac_fs_directory_record.selinux is defined
+
+- name: "Reading existing custom SELinux fcontext rules for directory"
+  ansible.builtin.command: semanage fcontext -l -C
+  register: iac_fs_selinux_directory_rules
+  changed_when: false
+  when: iac_fs_directory_record.selinux is defined
+
+- name: "Checking whether SELinux fcontext rule already exists for directory"
+  ansible.builtin.set_fact:
+    iac_fs_selinux_directory_rule_exists: >-
+      {{
+        iac_fs_selinux_directory_rules.stdout is search(
+          '^' ~ (iac_fs_selinux_target | regex_escape) ~ '\\s+',
+          multiline=True
+        )
+      }}
+    iac_fs_selinux_directory_rule_matches: >-
+      {{
+        iac_fs_selinux_directory_rules.stdout is search(
+          '^' ~ (iac_fs_selinux_target | regex_escape) ~ '\\s+.*' ~ (iac_fs_directory_record.selinux.setype | regex_escape) ~ '.*$',
+          multiline=True
+        )
+      }}
+  when: iac_fs_directory_record.selinux is defined
+
+- name: "Adding SELinux fcontext rule for directory"
+  ansible.builtin.command: >-
+    semanage fcontext
+    -a
+    -t {{ iac_fs_directory_record.selinux.setype }}
+    {{ iac_fs_selinux_target }}
+  when:
+    - iac_fs_directory_record.selinux is defined
+    - not iac_fs_selinux_directory_rule_exists
+
+- name: "Modifying SELinux fcontext rule for directory"
+  ansible.builtin.command: >-
+    semanage fcontext
+    -m
+    -t {{ iac_fs_directory_record.selinux.setype }}
+    {{ iac_fs_selinux_target }}
+  when:
+    - iac_fs_directory_record.selinux is defined
+    - iac_fs_selinux_directory_rule_exists
+    - not iac_fs_selinux_directory_rule_matches
+
+- name: "Restoring SELinux context for directory"
+  ansible.builtin.command: restorecon -Rv {{ iac_fs_directory_record.path }}
+  register: iac_fs_restorecon_directory
+  changed_when: >-
+    (iac_fs_restorecon_directory.stdout | default('') | trim) != ''
+    or (iac_fs_restorecon_directory.stderr | default('') | trim) != ''
+  when: iac_fs_directory_record.selinux is defined

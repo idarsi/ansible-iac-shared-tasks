@@ -17,36 +17,55 @@
       - iac_fs_directories is defined
     fail_msg: "All tests did not pass"
 
+- name: "Checking whether SELinux configuration is requested"
+  ansible.builtin.set_fact:
+    iac_fs_selinux_requested: >-
+      {{
+        (
+          iac_fs_directories | default([]) | selectattr('selinux', 'defined') | list | length
+        ) > 0
+        or
+        (
+          iac_fs_files | default([]) | selectattr('selinux', 'defined') | list | length
+        ) > 0
+      }}
+
+- name: "Checking that SELinux is supported when requested"
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.selinux is defined
+      - ansible_facts.selinux.status is defined
+      - ansible_facts.selinux.status != 'disabled'
+    fail_msg: "SELinux filesystem context configuration was requested but SELinux is not supported or is disabled on the target host"
+  when: iac_fs_selinux_requested
+
+- name: "Checking that semanage is available when requested"
+  ansible.builtin.command: semanage --help
+  register: iac_fs_semanage_check
+  changed_when: false
+  failed_when: iac_fs_semanage_check.rc != 0
+  when: iac_fs_selinux_requested
+
 ###############################################################################
 # LOOPING THROUGH DIRECTORIES
 ###############################################################################
 
 - name: "Looping through directories"
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: "{{ item.state | default('directory') }}"
-    owner: "{{ item.owner | default(omit) }}"
-    group: "{{ item.group | default(omit) }}"
-    mode: "{{ item.mode | default(omit) }}"
+  ansible.builtin.include_tasks: fs_present_directory.yml
   loop: "{{ iac_fs_directories | default([]) }}"
   loop_control:
-    label: "{{ item.path }}"
+    label: "{{ iac_fs_directory_record.path }}"
+    loop_var: iac_fs_directory_record
 
 ###############################################################################
 # FILESYSTEM: FILES (content)
 ###############################################################################
 
 - name: "Writing files from inline content"
-  ansible.builtin.copy:
-    dest: "{{ f.path }}"
-    content: "{{ f.content }}"
-    owner: "{{ f.owner | default(omit) }}"
-    group: "{{ f.group | default(omit) }}"
-    mode: "{{ f.mode | default(omit) }}"
+  ansible.builtin.include_tasks: fs_present_file.yml
   loop: "{{ iac_fs_files | default([]) }}"
   when:
     - (iac_fs_files | default([])) | length > 0
-    - f.content is defined
   loop_control:
-    loop_var: f
-    label: "{{ f.path }}"
+    loop_var: iac_fs_file_record
+    label: "{{ iac_fs_file_record.path }}"
