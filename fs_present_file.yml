@@ -3,7 +3,9 @@
   ansible.builtin.assert:
     that:
       - iac_fs_file_record.path is defined
-      - iac_fs_file_record.content is defined
+      - (iac_fs_file_record.content is defined) != (iac_fs_file_record.src is defined)
+      - iac_fs_file_record.remote_src is not defined or iac_fs_file_record.src is defined
+      - iac_fs_file_record.src is not defined or (iac_fs_file_record.src is match('^/'))
       - iac_fs_file_record.selinux is not defined or iac_fs_file_record.selinux.setype is defined
     fail_msg: "File filesystem record is missing required fields"
 
@@ -14,6 +16,17 @@
     owner: "{{ iac_fs_file_record.owner | default(omit) }}"
     group: "{{ iac_fs_file_record.group | default(omit) }}"
     mode: "{{ iac_fs_file_record.mode | default(omit) }}"
+  when: iac_fs_file_record.content is defined
+
+- name: "Ensuring file from source path is present"
+  ansible.builtin.copy:
+    dest: "{{ iac_fs_file_record.path }}"
+    src: "{{ iac_fs_file_record.src }}"
+    remote_src: "{{ iac_fs_file_record.remote_src | default(false) }}"
+    owner: "{{ iac_fs_file_record.owner | default(omit) }}"
+    group: "{{ iac_fs_file_record.group | default(omit) }}"
+    mode: "{{ iac_fs_file_record.mode | default(omit) }}"
+  when: iac_fs_file_record.src is defined
 
 - name: "Building SELinux fcontext expression for file"
   ansible.builtin.set_fact:
