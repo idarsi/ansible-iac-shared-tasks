@@ -14,8 +14,8 @@
 - name: "Checking if required variables are defined"
   ansible.builtin.assert:
     that:
-      - iac_fs_directories is defined
-    fail_msg: "All tests did not pass"
+      - iac_fs_directories is defined or iac_fs_files is defined
+    fail_msg: "At least one of iac_fs_directories or iac_fs_files must be defined"
 
 - name: "Checking whether SELinux configuration is requested"
   ansible.builtin.set_fact:
