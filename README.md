@@ -4,8 +4,8 @@ Shared task snippets for IDARSI Ansible roles.
 
 This repository is intended to be consumed as a git submodule under a role's
 `tasks/shared/` path. The snippets here must stay service-agnostic and rely
-only on shared variables such as `iac_fs_directories`, `iac_fs_files`, and
-`iac_cron`.
+only on shared variables such as `iac_fs_directories`, `iac_fs_files`,
+`iac_git_repos`, and `iac_cron`.
 
 ## Filesystem records
 
@@ -140,3 +140,60 @@ iac_fs_directories:
 
 Recursive directory copy is intentionally not overloaded onto
 `iac_fs_directories`.
+
+## Git repositories
+
+### `iac_git_repos`
+
+`iac_git_repos` manages Git working trees with `ansible.builtin.git`.
+
+Required fields:
+
+- `repo`
+- `dest`
+
+Common optional fields:
+
+- `version`
+- `update`
+- `force`
+- `recursive`
+- `single_branch`
+- `remote`
+- `accept_hostkey`
+- `key_file`
+- `depth`
+- `refspec`
+
+Optional task-level variable:
+
+- `iac_git_become_user`: run Git checkout as a specific user
+
+Examples:
+
+Cloning a repository with default branch:
+
+```yaml
+iac_git_repos:
+  - repo: https://github.com/example/project.git
+    dest: /srv/data/project
+```
+
+Cloning a specific branch:
+
+```yaml
+iac_git_repos:
+  - repo: https://github.com/example/project.git
+    dest: /srv/data/project
+    version: main
+    single_branch: true
+```
+
+Running checkout as a service user:
+
+```yaml
+iac_git_become_user: postgres
+iac_git_repos:
+  - repo: /srv/git/app-config
+    dest: /var/lib/pgsql/git/app-config
+```
