@@ -5,7 +5,7 @@ Shared task snippets for IDARSI Ansible roles.
 This repository is intended to be consumed as a git submodule under a role's
 `tasks/shared/` path. The snippets here must stay service-agnostic and rely
 only on shared variables such as `iac_fs_directories`, `iac_fs_files`,
-`iac_git_repos`, and `iac_cron`.
+`iac_fs_binds`, `iac_git_repos`, and `iac_cron`.
 
 ## Filesystem records
 
@@ -140,6 +140,57 @@ iac_fs_directories:
 
 Recursive directory copy is intentionally not overloaded onto
 `iac_fs_directories`.
+
+### `iac_fs_binds`
+
+`iac_fs_binds` manages directory bind mounts and optional one-time migration of
+existing data from the old target path into the new source path.
+
+Required fields:
+
+- `source`
+- `target`
+
+Common optional fields:
+
+- `owner`
+- `group`
+- `mode`
+- `move_from_target`
+
+Behavior:
+
+- `source` is the new real directory location
+- `target` is the legacy path that remains available through a bind mount
+- when `move_from_target: true`, existing content is moved from `target` to
+  `source` only if `source` is empty and `target` contains data
+- the task fails fast if `target` is already mounted from a different source,
+  or if both `source` and `target` already contain data during migration
+- the bind mount is persisted into `/etc/fstab`
+
+Example: migrating PostgreSQL data under `/srv/data` while keeping the legacy
+path available:
+
+```yaml
+iac_fs_binds:
+  - source: /srv/data/pgsql
+    target: /var/lib/pgsql
+    owner: postgres
+    group: postgres
+    mode: "0700"
+    move_from_target: true
+```
+
+Example: ensuring a bind mount without migration:
+
+```yaml
+iac_fs_binds:
+  - source: /srv/data/app-cache
+    target: /var/cache/myapp
+    owner: root
+    group: root
+    mode: "0755"
+```
 
 ## Git repositories
 
