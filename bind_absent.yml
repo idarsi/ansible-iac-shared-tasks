@@ -27,21 +27,14 @@
     loop_var: iac_fs_bind_record
     label: "{{ iac_fs_bind_record.target }}"
 
-- name: "Normalizing bind mount source values"
-  ansible.builtin.set_fact:
-    iac_fs_bind_live_mount_sources_normalized: >-
-      {{
-        (iac_fs_bind_live_mounts.results | default([]))
-        | map(attribute='stdout')
-        | map('trim')
-        | map('regex_replace', '^.*\\[([^]]+)\\]$', '\\1')
-        | list
-      }}
-
 - name: "Checking that active bind mount matches requested source"
   ansible.builtin.assert:
     that:
-      - iac_fs_bind_live_mount_source_normalized == '' or iac_fs_bind_record.source is not defined or iac_fs_bind_live_mount_source_normalized == iac_fs_bind_record.source
+      - >-
+        iac_fs_bind_live_mount_source == ''
+        or iac_fs_bind_record.source is not defined
+        or iac_fs_bind_live_mount_source == iac_fs_bind_record.source
+        or iac_fs_bind_live_mount_source.endswith('[' ~ iac_fs_bind_record.source ~ ']')
     fail_msg: "Bind target is mounted from a different source than requested"
   loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results) | list }}"
   loop_control:
@@ -50,14 +43,13 @@
   vars:
     iac_fs_bind_record: "{{ iac_fs_bind_mount_triplet.0 }}"
     iac_fs_bind_live_mount: "{{ iac_fs_bind_mount_triplet.1 }}"
-    iac_fs_bind_live_mount_source_normalized: "{{ iac_fs_bind_live_mount_sources_normalized[iac_fs_bind_assert_index] }}"
-    iac_fs_bind_assert_index: "{{ ansible_loop.index0 }}"
+    iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
 
 - name: "Removing active bind mount"
   ansible.builtin.command: >-
     umount {{ iac_fs_bind_record.target }}
   when:
-    - iac_fs_bind_live_mount_source_normalized != ''
+    - iac_fs_bind_live_mount_source != ''
   loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results) | list }}"
   loop_control:
     label: "{{ iac_fs_bind_mount_triplet.0.target }}"
@@ -65,8 +57,7 @@
   vars:
     iac_fs_bind_record: "{{ iac_fs_bind_mount_triplet.0 }}"
     iac_fs_bind_live_mount: "{{ iac_fs_bind_mount_triplet.1 }}"
-    iac_fs_bind_live_mount_source_normalized: "{{ iac_fs_bind_live_mount_sources_normalized[iac_fs_bind_umount_index] }}"
-    iac_fs_bind_umount_index: "{{ ansible_loop.index0 }}"
+    iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
 
 - name: "Removing bind mount from fstab"
   ansible.builtin.lineinfile:
