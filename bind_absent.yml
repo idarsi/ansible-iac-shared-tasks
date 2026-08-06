@@ -27,6 +27,30 @@
     loop_var: iac_fs_bind_record
     label: "{{ iac_fs_bind_record.target }}"
 
+- name: "Checking backing mount source for configured bind source path"
+  ansible.builtin.command: >-
+    findmnt -n -T {{ iac_fs_bind_record.source }} -o SOURCE
+  register: iac_fs_bind_source_mount_sources
+  changed_when: false
+  failed_when: false
+  when: iac_fs_bind_record.source is defined
+  loop: "{{ iac_fs_binds | default([]) }}"
+  loop_control:
+    loop_var: iac_fs_bind_record
+    label: "{{ iac_fs_bind_record.target }}"
+
+- name: "Checking backing mount target for configured bind source path"
+  ansible.builtin.command: >-
+    findmnt -n -T {{ iac_fs_bind_record.source }} -o TARGET
+  register: iac_fs_bind_source_mount_targets
+  changed_when: false
+  failed_when: false
+  when: iac_fs_bind_record.source is defined
+  loop: "{{ iac_fs_binds | default([]) }}"
+  loop_control:
+    loop_var: iac_fs_bind_record
+    label: "{{ iac_fs_bind_record.target }}"
+
 - name: "Checking that active bind mount matches requested source"
   ansible.builtin.assert:
     that:
@@ -35,8 +59,16 @@
         or iac_fs_bind_record.source is not defined
         or iac_fs_bind_live_mount_source == iac_fs_bind_record.source
         or iac_fs_bind_live_mount_source.endswith('[' ~ iac_fs_bind_record.source ~ ']')
+        or iac_fs_bind_live_mount_source == iac_fs_bind_source_mount_source
+        or (
+          iac_fs_bind_source_mount_source != ''
+          and iac_fs_bind_source_mount_target != ''
+          and iac_fs_bind_record.source != iac_fs_bind_source_mount_target
+          and iac_fs_bind_live_mount_source
+             == iac_fs_bind_source_mount_source ~ '[' ~ iac_fs_bind_source_relative ~ ']'
+        )
     fail_msg: "Bind target is mounted from a different source than requested"
-  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results) | list }}"
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_mount_sources.results | default([]), iac_fs_bind_source_mount_targets.results | default([])) | list }}"
   loop_control:
     label: "{{ iac_fs_bind_mount_triplet.0.target }}"
     loop_var: iac_fs_bind_mount_triplet
@@ -44,6 +76,17 @@
     iac_fs_bind_record: "{{ iac_fs_bind_mount_triplet.0 }}"
     iac_fs_bind_live_mount: "{{ iac_fs_bind_mount_triplet.1 }}"
     iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
+    iac_fs_bind_source_mount_source: "{{ iac_fs_bind_mount_triplet.2.stdout | default('') | trim }}"
+    iac_fs_bind_source_mount_target: "{{ iac_fs_bind_mount_triplet.3.stdout | default('') | trim }}"
+    iac_fs_bind_source_relative: >-
+      {{
+        ''
+        if iac_fs_bind_record.source is not defined or iac_fs_bind_source_mount_target == ''
+        else (
+          iac_fs_bind_record.source
+          | regex_replace('^' ~ (iac_fs_bind_source_mount_target | regex_escape), '')
+        )
+      }}
 
 - name: "Removing active bind mount"
   ansible.builtin.command: >-
