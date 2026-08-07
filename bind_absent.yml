@@ -60,6 +60,13 @@
     iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
 
 - name: "Removing bind mount from fstab"
+  ansible.builtin.copy:
+    dest: /etc/fstab
+    content: ""
+    force: false
+    mode: "0644"
+
+- name: "Removing bind mount from fstab"
   ansible.builtin.lineinfile:
     path: /etc/fstab
     regexp: "^\\S+\\s+{{ iac_fs_bind_record.target | regex_escape }}\\s+"
