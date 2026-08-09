@@ -163,9 +163,11 @@ Behavior:
 - `source` is the new real directory location
 - `target` is the legacy path that remains available through a bind mount
 - when `move_from_target: true`, existing content is moved from `target` to
-  `source` only if `source` is empty and `target` contains data
+  `source` when `target` contains data and the top-level entry names in
+  `source` and `target` do not conflict
 - the task fails fast if `target` is already mounted from a different source,
-  or if both `source` and `target` already contain data during migration
+  or if migration would merge conflicting top-level entry names from `target`
+  into `source`
 - the bind mount is persisted into `/etc/fstab`
 
 Example: migrating PostgreSQL data under `/srv/data` while keeping the legacy
