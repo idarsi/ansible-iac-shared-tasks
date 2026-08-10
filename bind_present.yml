@@ -97,98 +97,7 @@
     loop_var: iac_fs_bind_record
     label: "{{ iac_fs_bind_record.target }}"
 
-- name: "Checking whether bind source directory has existing content"
-  ansible.builtin.command: >-
-    find {{ iac_fs_bind_record.source }} -mindepth 1 -maxdepth 1 -print -quit
-  register: iac_fs_bind_source_content_checks
-  changed_when: false
-  failed_when: false
-  loop: "{{ iac_fs_binds | default([]) }}"
-  loop_control:
-    loop_var: iac_fs_bind_record
-    label: "{{ iac_fs_bind_record.target }}"
-
-- name: "Checking whether bind target directory has existing content"
-  ansible.builtin.command: >-
-    find {{ iac_fs_bind_record.target }} -mindepth 1 -maxdepth 1 -print -quit
-  register: iac_fs_bind_target_content_checks
-  changed_when: false
-  failed_when: false
-  when: iac_fs_bind_record.move_from_target | default(false) | bool
-  loop: "{{ iac_fs_binds | default([]) }}"
-  loop_control:
-    loop_var: iac_fs_bind_record
-    label: "{{ iac_fs_bind_record.target }}"
-
-- name: "Listing top-level bind source entries for migration safety checks"
-  ansible.builtin.shell: >-
-    find {{ iac_fs_bind_record.source | quote }} -mindepth 1 -maxdepth 1 -printf '%f\n' | sort
-  register: iac_fs_bind_source_entry_lists
-  changed_when: false
-  failed_when: false
-  when: iac_fs_bind_record.move_from_target | default(false) | bool
-  loop: "{{ iac_fs_binds | default([]) }}"
-  loop_control:
-    loop_var: iac_fs_bind_record
-    label: "{{ iac_fs_bind_record.target }}"
-
-- name: "Listing top-level bind target entries for migration safety checks"
-  ansible.builtin.shell: >-
-    find {{ iac_fs_bind_record.target | quote }} -mindepth 1 -maxdepth 1 -printf '%f\n' | sort
-  register: iac_fs_bind_target_entry_lists
-  changed_when: false
-  failed_when: false
-  when: iac_fs_bind_record.move_from_target | default(false) | bool
-  loop: "{{ iac_fs_binds | default([]) }}"
-  loop_control:
-    loop_var: iac_fs_bind_record
-    label: "{{ iac_fs_bind_record.target }}"
-
-- name: "Checking bind mount migration preconditions"
-  ansible.builtin.assert:
-    that:
-      - >-
-        iac_fs_bind_live_mount_source == ''
-        or iac_fs_bind_live_mount_source == iac_fs_bind_record.source
-        or iac_fs_bind_live_mount_source.endswith('[' ~ iac_fs_bind_record.source ~ ']')
-        or iac_fs_bind_live_mount_source == iac_fs_bind_source_mount_source
-        or (
-          iac_fs_bind_source_mount_source != ''
-          and iac_fs_bind_source_mount_target != ''
-          and iac_fs_bind_record.source != iac_fs_bind_source_mount_target
-          and iac_fs_bind_live_mount_source
-             == iac_fs_bind_source_mount_source ~ '[' ~ iac_fs_bind_source_relative ~ ']'
-        )
-      - not (
-          (iac_fs_bind_record.move_from_target | default(false) | bool)
-          and (iac_fs_bind_live_mount_source == '')
-          and (iac_fs_bind_target_content.stdout | trim != '')
-          and (iac_fs_bind_conflicting_entries | length > 0)
-        )
-    fail_msg: "Bind mount state is ambiguous, already mounted from a different source, or source/target entries would conflict during migration"
-  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_mount_sources.results, iac_fs_bind_source_mount_targets.results, iac_fs_bind_source_content_checks.results, iac_fs_bind_target_content_checks.results | default([]), iac_fs_bind_source_entry_lists.results | default([]), iac_fs_bind_target_entry_lists.results | default([])) | list }}"
-  loop_control:
-    label: "{{ iac_fs_bind_validation_triplet.0.target }}"
-    loop_var: iac_fs_bind_validation_triplet
-  when: iac_fs_bind_record.move_from_target | default(false) | bool
-  vars:
-    iac_fs_bind_record: "{{ iac_fs_bind_validation_triplet.0 }}"
-    iac_fs_bind_live_mount: "{{ iac_fs_bind_validation_triplet.1 }}"
-    iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
-    iac_fs_bind_source_mount_source: "{{ iac_fs_bind_validation_triplet.2.stdout | default('') | trim }}"
-    iac_fs_bind_source_mount_target: "{{ iac_fs_bind_validation_triplet.3.stdout | default('') | trim }}"
-    iac_fs_bind_source_content: "{{ iac_fs_bind_validation_triplet.4 }}"
-    iac_fs_bind_target_content: "{{ iac_fs_bind_validation_triplet.5 }}"
-    iac_fs_bind_source_entries: "{{ iac_fs_bind_validation_triplet.6.stdout_lines | default([]) }}"
-    iac_fs_bind_target_entries: "{{ iac_fs_bind_validation_triplet.7.stdout_lines | default([]) }}"
-    iac_fs_bind_conflicting_entries: "{{ iac_fs_bind_source_entries | intersect(iac_fs_bind_target_entries) }}"
-    iac_fs_bind_source_relative: >-
-      {{
-        iac_fs_bind_record.source
-        | regex_replace('^' ~ (iac_fs_bind_source_mount_target | regex_escape), '')
-      }}
-
-- name: "Checking live bind mount state when no migration is requested"
+- name: "Checking live bind mount state"
   ansible.builtin.assert:
     that:
       - >-
@@ -208,7 +117,6 @@
   loop_control:
     label: "{{ iac_fs_bind_live_triplet.0.target }}"
     loop_var: iac_fs_bind_live_triplet
-  when: not (iac_fs_bind_record.move_from_target | default(false) | bool)
   vars:
     iac_fs_bind_record: "{{ iac_fs_bind_live_triplet.0 }}"
     iac_fs_bind_live_mount: "{{ iac_fs_bind_live_triplet.1 }}"
@@ -230,6 +138,62 @@
     loop_var: iac_fs_bind_record
     label: "{{ iac_fs_bind_record.target }}"
 
+- name: "Checking whether bind source directory has existing content before migration"
+  ansible.builtin.command: >-
+    find {{ iac_fs_bind_record.source | quote }} -mindepth 1 -maxdepth 1 -print -quit
+  register: iac_fs_bind_source_content_checks
+  changed_when: false
+  failed_when: false
+  when:
+    - iac_fs_bind_record.move_from_target | default(false) | bool
+    - iac_fs_bind_live_mount.stdout | trim == ''
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results) | list }}"
+  loop_control:
+    loop_var: iac_fs_bind_migration_triplet
+    label: "{{ iac_fs_bind_migration_triplet.0.target }}"
+  vars:
+    iac_fs_bind_record: "{{ iac_fs_bind_migration_triplet.0 }}"
+    iac_fs_bind_live_mount: "{{ iac_fs_bind_migration_triplet.1 }}"
+
+- name: "Checking whether bind target directory has existing content before migration"
+  ansible.builtin.command: >-
+    find {{ iac_fs_bind_record.target | quote }} -mindepth 1 -maxdepth 1 -print -quit
+  register: iac_fs_bind_target_content_checks
+  changed_when: false
+  failed_when: false
+  when:
+    - iac_fs_bind_record.move_from_target | default(false) | bool
+    - iac_fs_bind_live_mount.stdout | trim == ''
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results) | list }}"
+  loop_control:
+    loop_var: iac_fs_bind_migration_triplet
+    label: "{{ iac_fs_bind_migration_triplet.0.target }}"
+  vars:
+    iac_fs_bind_record: "{{ iac_fs_bind_migration_triplet.0 }}"
+    iac_fs_bind_live_mount: "{{ iac_fs_bind_migration_triplet.1 }}"
+
+- name: "Checking bind migration safety"
+  ansible.builtin.assert:
+    that:
+      - not (
+          (iac_fs_bind_source_content.stdout | trim != '')
+          and (iac_fs_bind_target_content.stdout | trim != '')
+        )
+    fail_msg: "Bind migration requires either an empty source or an empty target before the first mount"
+  when:
+    - iac_fs_bind_record.move_from_target | default(false) | bool
+    - iac_fs_bind_live_mount_source == ''
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_content_checks.results | default([]), iac_fs_bind_target_content_checks.results | default([])) | list }}"
+  loop_control:
+    label: "{{ iac_fs_bind_migration_validation.0.target }}"
+    loop_var: iac_fs_bind_migration_validation
+  vars:
+    iac_fs_bind_record: "{{ iac_fs_bind_migration_validation.0 }}"
+    iac_fs_bind_live_mount: "{{ iac_fs_bind_migration_validation.1 }}"
+    iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
+    iac_fs_bind_source_content: "{{ iac_fs_bind_migration_validation.2 }}"
+    iac_fs_bind_target_content: "{{ iac_fs_bind_migration_validation.3 }}"
+
 - name: "Moving existing data from bind target to bind source"
   ansible.builtin.shell: >-
     find . -mindepth 1 -maxdepth 1 -exec mv -t {{ iac_fs_bind_record.source | quote }} -- {} +
@@ -240,9 +204,9 @@
   when:
     - iac_fs_bind_record.move_from_target | default(false) | bool
     - iac_fs_bind_live_mount_source == ''
+    - iac_fs_bind_source_content.stdout | trim == ''
     - iac_fs_bind_target_content.stdout | trim != ''
-    - iac_fs_bind_conflicting_entries | length == 0
-  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_content_checks.results, iac_fs_bind_target_content_checks.results | default([]), iac_fs_bind_source_entry_lists.results | default([]), iac_fs_bind_target_entry_lists.results | default([])) | list }}"
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_content_checks.results | default([]), iac_fs_bind_target_content_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ iac_fs_bind_move_triplet.0.target }}"
     loop_var: iac_fs_bind_move_triplet
@@ -252,9 +216,6 @@
     iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
     iac_fs_bind_source_content: "{{ iac_fs_bind_move_triplet.2 }}"
     iac_fs_bind_target_content: "{{ iac_fs_bind_move_triplet.3 }}"
-    iac_fs_bind_source_entries: "{{ iac_fs_bind_move_triplet.4.stdout_lines | default([]) }}"
-    iac_fs_bind_target_entries: "{{ iac_fs_bind_move_triplet.5.stdout_lines | default([]) }}"
-    iac_fs_bind_conflicting_entries: "{{ iac_fs_bind_source_entries | intersect(iac_fs_bind_target_entries) }}"
 
 - name: "Ensuring /etc/fstab exists before persisting bind mounts"
   ansible.builtin.copy:
