@@ -10,99 +10,103 @@
     that:
       - iac_fs_bind_record.target is defined
       - iac_fs_bind_record.target is match('^/')
+      - iac_fs_bind_record.source is not defined or iac_fs_bind_record.source is match('^/')
     fail_msg: "Bind record is missing required fields"
   loop: "{{ iac_fs_binds | default([]) }}"
   loop_control:
     loop_var: iac_fs_bind_record
     label: "{{ iac_fs_bind_record.target | default('unknown') }}"
 
-- name: "Checking current live mount source for bind target"
-  ansible.builtin.command: >-
-    findmnt -n -M {{ iac_fs_bind_record.target }} -o SOURCE
-  register: iac_fs_bind_live_mounts
-  changed_when: false
-  failed_when: false
-  loop: "{{ iac_fs_binds | default([]) }}"
-  loop_control:
-    loop_var: iac_fs_bind_record
-    label: "{{ iac_fs_bind_record.target }}"
-
-- name: "Checking backing mount source for configured bind source path"
-  ansible.builtin.command: >-
-    findmnt -n -T {{ iac_fs_bind_record.source }} -o SOURCE
-  register: iac_fs_bind_source_mount_sources
-  changed_when: false
-  failed_when: false
+- name: "Checking bind source path state"
+  ansible.builtin.stat:
+    path: "{{ iac_fs_bind_record.source }}"
+  register: iac_fs_bind_source_stats
   when: iac_fs_bind_record.source is defined
   loop: "{{ iac_fs_binds | default([]) }}"
   loop_control:
     loop_var: iac_fs_bind_record
     label: "{{ iac_fs_bind_record.target }}"
 
-- name: "Checking backing mount target for configured bind source path"
-  ansible.builtin.command: >-
-    findmnt -n -T {{ iac_fs_bind_record.source }} -o TARGET
-  register: iac_fs_bind_source_mount_targets
-  changed_when: false
-  failed_when: false
-  when: iac_fs_bind_record.source is defined
-  loop: "{{ iac_fs_binds | default([]) }}"
-  loop_control:
-    loop_var: iac_fs_bind_record
-    label: "{{ iac_fs_bind_record.target }}"
-
-- name: "Checking that active bind mount matches requested source"
+- name: "Checking bind source paths are directories when they exist"
   ansible.builtin.assert:
     that:
-      - >-
-        iac_fs_bind_live_mount_source == ''
-        or iac_fs_bind_record.source is not defined
-        or iac_fs_bind_live_mount_source == iac_fs_bind_record.source
-        or iac_fs_bind_live_mount_source.endswith('[' ~ iac_fs_bind_record.source ~ ']')
-        or iac_fs_bind_live_mount_source == iac_fs_bind_source_mount_source
-        or (
-          iac_fs_bind_source_mount_source != ''
-          and iac_fs_bind_source_mount_target != ''
-          and iac_fs_bind_record.source != iac_fs_bind_source_mount_target
-          and iac_fs_bind_live_mount_source
-             == iac_fs_bind_source_mount_source ~ '[' ~ iac_fs_bind_source_relative ~ ']'
-        )
-    fail_msg: "Bind target is mounted from a different source than requested"
-  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_mount_sources.results | default([]), iac_fs_bind_source_mount_targets.results | default([])) | list }}"
+      - not iac_fs_bind_source_stat.stat.exists or (iac_fs_bind_source_stat.stat.isdir | default(false))
+    fail_msg: "Bind source must be a directory when it exists"
+  when: iac_fs_bind_record.source is defined
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_source_stats.results | default([])) | list }}"
   loop_control:
-    label: "{{ iac_fs_bind_mount_triplet.0.target }}"
-    loop_var: iac_fs_bind_mount_triplet
+    label: "{{ iac_fs_bind_source_triplet.0.target }}"
+    loop_var: iac_fs_bind_source_triplet
   vars:
-    iac_fs_bind_record: "{{ iac_fs_bind_mount_triplet.0 }}"
-    iac_fs_bind_live_mount: "{{ iac_fs_bind_mount_triplet.1 }}"
-    iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
-    iac_fs_bind_source_mount_source: "{{ iac_fs_bind_mount_triplet.2.stdout | default('') | trim }}"
-    iac_fs_bind_source_mount_target: "{{ iac_fs_bind_mount_triplet.3.stdout | default('') | trim }}"
-    iac_fs_bind_source_relative: >-
-      {{
-        ''
-        if iac_fs_bind_record.source is not defined or iac_fs_bind_source_mount_target == ''
-        else (
-          iac_fs_bind_record.source
-          | regex_replace('^' ~ (iac_fs_bind_source_mount_target | regex_escape), '')
-        )
-      }}
+    iac_fs_bind_record: "{{ iac_fs_bind_source_triplet.0 }}"
+    iac_fs_bind_source_stat: "{{ iac_fs_bind_source_triplet.1 }}"
+
+- name: "Checking whether bind target is currently mounted"
+  ansible.builtin.command: >-
+    mountpoint -q {{ iac_fs_bind_record.target }}
+  register: iac_fs_bind_mountpoints
+  changed_when: false
+  failed_when: false
+  loop: "{{ iac_fs_binds | default([]) }}"
+  loop_control:
+    loop_var: iac_fs_bind_record
+    label: "{{ iac_fs_bind_record.target }}"
 
 - name: "Removing active bind mount"
   ansible.builtin.command: >-
     umount {{ iac_fs_bind_record.target }}
-  when:
-    - iac_fs_bind_live_mount_source != ''
-  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results) | list }}"
+  register: iac_fs_bind_umount_results
+  changed_when: (iac_fs_bind_umount_results.rc | default(1)) == 0
+  failed_when: false
+  when: iac_fs_bind_mountpoint.rc == 0
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_mountpoints.results) | list }}"
   loop_control:
     label: "{{ iac_fs_bind_mount_triplet.0.target }}"
     loop_var: iac_fs_bind_mount_triplet
   vars:
     iac_fs_bind_record: "{{ iac_fs_bind_mount_triplet.0 }}"
-    iac_fs_bind_live_mount: "{{ iac_fs_bind_mount_triplet.1 }}"
-    iac_fs_bind_live_mount_source: "{{ iac_fs_bind_live_mount.stdout | trim }}"
+    iac_fs_bind_mountpoint: "{{ iac_fs_bind_mount_triplet.1 }}"
 
-- name: "Removing bind mount from fstab"
+- name: "Checking active bind mount removal result"
+  ansible.builtin.assert:
+    that:
+      - >-
+        iac_fs_bind_umount_result.rc == 0
+        or 'target is busy' in (iac_fs_bind_umount_result.stderr | default('') | lower)
+    fail_msg: "Bind target could not be unmounted cleanly"
+  loop: >-
+    {{
+      iac_fs_bind_umount_results.results
+      | default([])
+      | selectattr('rc', 'defined')
+      | list
+    }}
+  loop_control:
+    loop_var: iac_fs_bind_umount_result
+    label: "{{ iac_fs_bind_umount_result.iac_fs_bind_mount_triplet.0.target | default('unknown') }}"
+
+- name: "Lazy-unmounting busy bind mount"
+  ansible.builtin.command: >-
+    umount -l {{ iac_fs_bind_record.target }}
+  changed_when: true
+  when:
+    - iac_fs_bind_umount_result.rc is defined
+    - iac_fs_bind_umount_result.rc != 0
+    - "'target is busy' in (iac_fs_bind_umount_result.stderr | default('') | lower)"
+  loop: >-
+    {{
+      iac_fs_bind_umount_results.results
+      | default([])
+      | selectattr('rc', 'defined')
+      | list
+    }}
+  loop_control:
+    loop_var: iac_fs_bind_umount_result
+    label: "{{ iac_fs_bind_umount_result.iac_fs_bind_mount_triplet.0.target | default('unknown') }}"
+  vars:
+    iac_fs_bind_record: "{{ iac_fs_bind_umount_result.iac_fs_bind_mount_triplet.0 }}"
+
+- name: "Ensuring /etc/fstab exists before removing bind mounts"
   ansible.builtin.copy:
     dest: /etc/fstab
     content: ""
@@ -118,3 +122,58 @@
   loop_control:
     loop_var: iac_fs_bind_record
     label: "{{ iac_fs_bind_record.target }}"
+
+- name: "Checking whether bind source directory has existing content after unmount"
+  ansible.builtin.command: >-
+    find {{ iac_fs_bind_record.source | quote }} -mindepth 1 -maxdepth 1 -print -quit
+  register: iac_fs_bind_source_content_checks
+  changed_when: false
+  failed_when: false
+  when:
+    - iac_fs_bind_record.source is defined
+    - iac_fs_bind_source_stat.stat.exists | default(false)
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_source_stats.results | default([])) | list }}"
+  loop_control:
+    label: "{{ iac_fs_bind_source_content_triplet.0.target }}"
+    loop_var: iac_fs_bind_source_content_triplet
+  vars:
+    iac_fs_bind_record: "{{ iac_fs_bind_source_content_triplet.0 }}"
+    iac_fs_bind_source_stat: "{{ iac_fs_bind_source_content_triplet.1 }}"
+
+- name: "Checking bind source is empty when purge is disabled"
+  ansible.builtin.assert:
+    that:
+      - iac_fs_bind_source_content.stdout | trim == ''
+    fail_msg: "Bind source still contains files; set purge_on_absent: true to remove them"
+  when:
+    - iac_fs_bind_record.source is defined
+    - not (iac_fs_bind_record.purge_on_absent | default(false) | bool)
+    - iac_fs_bind_source_stat.stat.exists | default(false)
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_source_stats.results | default([]), iac_fs_bind_source_content_checks.results | default([])) | list }}"
+  loop_control:
+    label: "{{ iac_fs_bind_source_validation.0.target }}"
+    loop_var: iac_fs_bind_source_validation
+  vars:
+    iac_fs_bind_record: "{{ iac_fs_bind_source_validation.0 }}"
+    iac_fs_bind_source_stat: "{{ iac_fs_bind_source_validation.1 }}"
+    iac_fs_bind_source_content: "{{ iac_fs_bind_source_validation.2 }}"
+
+- name: "Purging bind source directory contents"
+  ansible.builtin.shell: >-
+    find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  args:
+    chdir: "{{ iac_fs_bind_record.source }}"
+  changed_when: true
+  when:
+    - iac_fs_bind_record.source is defined
+    - iac_fs_bind_record.purge_on_absent | default(false) | bool
+    - iac_fs_bind_source_stat.stat.exists | default(false)
+    - iac_fs_bind_source_content.stdout | trim != ''
+  loop: "{{ iac_fs_binds | zip(iac_fs_bind_source_stats.results | default([]), iac_fs_bind_source_content_checks.results | default([])) | list }}"
+  loop_control:
+    label: "{{ iac_fs_bind_source_purge.0.target }}"
+    loop_var: iac_fs_bind_source_purge
+  vars:
+    iac_fs_bind_record: "{{ iac_fs_bind_source_purge.0 }}"
+    iac_fs_bind_source_stat: "{{ iac_fs_bind_source_purge.1 }}"
+    iac_fs_bind_source_content: "{{ iac_fs_bind_source_purge.2 }}"

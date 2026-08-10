@@ -157,17 +157,20 @@ Common optional fields:
 - `group`
 - `mode`
 - `move_from_target`
+- `purge_on_absent`
 
 Behavior:
 
 - `source` is the new real directory location
 - `target` is the legacy path that remains available through a bind mount
 - when `move_from_target: true`, existing content is moved from `target` to
-  `source` when `target` contains data and the top-level entry names in
-  `source` and `target` do not conflict
-- the task fails fast if `target` is already mounted from a different source,
-  or if migration would merge conflicting top-level entry names from `target`
-  into `source`
+  `source` only before the first mount and only when `source` is empty
+- when both `source` and `target` already contain data before the first mount,
+  the task fails instead of trying to merge them automatically
+- the task fails fast if `target` is already mounted from a different source
+- when `purge_on_absent: true`, the `absent` flow removes the contents of
+  `source` after unmounting; when omitted or `false`, `absent` fails if
+  `source` still contains files
 - the bind mount is persisted into `/etc/fstab`
 
 Example: migrating PostgreSQL data under `/srv/data` while keeping the legacy
@@ -181,6 +184,15 @@ iac_fs_binds:
     group: postgres
     mode: "0700"
     move_from_target: true
+```
+
+Example: removing a bind mount and purging the backing directory contents:
+
+```yaml
+iac_fs_binds:
+  - source: /srv/data/app-cache
+    target: /var/cache/myapp
+    purge_on_absent: true
 ```
 
 Example: ensuring a bind mount without migration:
