@@ -206,6 +206,107 @@ iac_fs_binds:
     mode: "0755"
 ```
 
+## Cron jobs
+
+### `iac_cron`
+
+`iac_cron` manages cron entries with `ansible.builtin.cron`.
+
+Required fields for present state:
+
+- `name`
+- `job`
+- `cron_file`
+
+Common optional fields for present state:
+
+- `state`
+- `user`
+- `special_time`
+- `month`
+- `day`
+- `weekday`
+- `hour`
+- `minute`
+
+Behavior:
+
+- when `user` is omitted, the task defaults to `root`
+- the current shared task implementation writes cron entries via `cron_file`
+- the absent flow removes entries by `name` from the given `cron_file`
+- `special_time` can be used for shortcuts such as `reboot`, `daily`, or
+  `monthly` instead of explicit schedule fields
+
+Example: ensuring a root-owned heartbeat cron job:
+
+```yaml
+iac_cron:
+  - name: idarsi-heartbeat
+    user: root
+    minute: "*/5"
+    hour: "*"
+    weekday: "*"
+    job: "/usr/local/bin/idarsi-heartbeat"
+    cron_file: idarsi-heartbeat
+```
+
+Example: ensuring a service user's nightly cron job:
+
+```yaml
+iac_cron:
+  - name: postgres-backup
+    user: postgres
+    minute: "15"
+    hour: "2"
+    weekday: "*"
+    job: "/usr/local/bin/postgres-backup"
+    cron_file: postgres-backup
+```
+
+Example: ensuring a monthly cleanup job on the first day of the month:
+
+```yaml
+iac_cron:
+  - name: idarsi-monthly-cleanup
+    user: root
+    minute: "30"
+    hour: "3"
+    day: "1"
+    month: "*"
+    job: "/usr/local/bin/idarsi-monthly-cleanup"
+    cron_file: idarsi-monthly-cleanup
+```
+
+Example: ensuring a job runs on reboot:
+
+```yaml
+iac_cron:
+  - name: idarsi-startup-check
+    user: root
+    special_time: reboot
+    job: "/usr/local/bin/idarsi-startup-check"
+    cron_file: idarsi-startup-check
+```
+
+Example: ensuring a job runs daily via `special_time`:
+
+```yaml
+iac_cron:
+  - name: idarsi-daily-report
+    user: root
+    special_time: daily
+    job: "/usr/local/bin/idarsi-daily-report"
+    cron_file: idarsi-daily-report
+```
+
+Example: removing a cron entry:
+
+```yaml
+iac_cron:
+  - name: idarsi-heartbeat
+    cron_file: idarsi-heartbeat
+```
+
 ## Git repositories
 
 ### `iac_git_repos`
