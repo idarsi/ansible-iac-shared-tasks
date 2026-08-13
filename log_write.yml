@@ -1,0 +1,35 @@
+---
+###############################################################################
+#
+# log_write.yml
+#
+# @author Arsi Atomi
+#
+###############################################################################
+
+###############################################################################
+# WRITING LOGS
+###############################################################################
+
+- name: "Checking if task report logging is configured"
+  ansible.builtin.assert:
+    that:
+      - iac_service_name is defined
+      - iac_log_write is defined
+      - iac_ansible_report_tasks_path is defined
+    fail_msg: "iac_service_name, iac_log_write, and iac_ansible_report_tasks_path must be defined for shared log writing"
+  when: iac_ansible_report | default(false)
+
+- name: "Adding log to task-report"
+  ansible.builtin.shell: >
+    echo "{{ ansible_date_time.iso8601 }} {{ ansible_facts['ssh_user'] | default(lookup('env', 'USER')) }} {{ iac_service_name }} {{ iac_log_write }}" \
+    >> {{ iac_ansible_report_tasks_path }}
+  register: iac_log_write_output
+  changed_when: false
+  failed_when: iac_log_write_output.rc != 0
+  when: iac_ansible_report | default(false)
+
+- name: "Clearing log variables"
+  ansible.builtin.set_fact:
+    iac_log_write: null
+  when: iac_ansible_report | default(false)
