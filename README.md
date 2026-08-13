@@ -363,3 +363,31 @@ iac_git_repos:
   - repo: /srv/git/app-config
     dest: /var/lib/pgsql/git/app-config
 ```
+
+## Task-report logging
+
+### `log_write.yml`
+
+`log_write.yml` appends one standardized operational line to the task report.
+
+Required variables when `iac_ansible_report: true`:
+
+- `iac_service_name`
+- `iac_log_write`
+- `iac_ansible_report_tasks_path`
+
+Behavior:
+
+- writes the line in format `<iso8601> <ssh_user> <service> <message>`
+- uses `ansible_facts['ssh_user']` and falls back to controller `USER`
+- clears `iac_log_write` after writing so later tasks do not reuse it
+- does nothing when `iac_ansible_report` is omitted or `false`
+
+Example:
+
+```yaml
+- name: "Writing log"
+  ansible.builtin.include_tasks: shared/log_write.yml
+  vars:
+    iac_log_write: "Ensured service nginx is started"
+```
