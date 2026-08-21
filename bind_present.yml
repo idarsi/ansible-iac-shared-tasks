@@ -104,6 +104,7 @@
         iac_fs_bind_live_mount_source == ''
         or iac_fs_bind_live_mount_source == iac_fs_bind_record.source
         or iac_fs_bind_live_mount_source.endswith('[' ~ iac_fs_bind_record.source ~ ']')
+        or iac_fs_bind_live_mount_source.endswith('/' ~ (iac_fs_bind_record.source | regex_replace('^/', '')) ~ ']')
         or iac_fs_bind_live_mount_source == iac_fs_bind_source_mount_source
         or (
           iac_fs_bind_source_mount_source != ''
