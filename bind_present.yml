@@ -183,7 +183,16 @@
   when:
     - iac_fs_bind_record.move_from_target | default(false) | bool
     - iac_fs_bind_live_mount_source == ''
-  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_content_checks.results | default([]), iac_fs_bind_target_content_checks.results | default([])) | list }}"
+  loop: >-
+    {{
+      iac_fs_binds
+      | zip(
+          iac_fs_bind_live_mounts.results,
+          iac_fs_bind_source_content_checks.results | default([]),
+          iac_fs_bind_target_content_checks.results | default([])
+        )
+      | list
+    }}
   loop_control:
     label: "{{ iac_fs_bind_migration_validation.0.target }}"
     loop_var: iac_fs_bind_migration_validation
@@ -206,7 +215,16 @@
     - iac_fs_bind_live_mount_source == ''
     - iac_fs_bind_source_content.stdout | trim == ''
     - iac_fs_bind_target_content.stdout | trim != ''
-  loop: "{{ iac_fs_binds | zip(iac_fs_bind_live_mounts.results, iac_fs_bind_source_content_checks.results | default([]), iac_fs_bind_target_content_checks.results | default([])) | list }}"
+  loop: >-
+    {{
+      iac_fs_binds
+      | zip(
+          iac_fs_bind_live_mounts.results,
+          iac_fs_bind_source_content_checks.results | default([]),
+          iac_fs_bind_target_content_checks.results | default([])
+        )
+      | list
+    }}
   loop_control:
     label: "{{ iac_fs_bind_move_triplet.0.target }}"
     loop_var: iac_fs_bind_move_triplet

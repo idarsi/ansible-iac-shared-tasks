@@ -63,6 +63,7 @@
     -a
     -t {{ iac_fs_file_record.selinux.setype }}
     {{ iac_fs_selinux_target }}
+  changed_when: true
   when:
     - iac_fs_file_record.selinux is defined
     - not iac_fs_selinux_file_rule_exists
@@ -73,6 +74,7 @@
     -m
     -t {{ iac_fs_file_record.selinux.setype }}
     {{ iac_fs_selinux_target }}
+  changed_when: true
   when:
     - iac_fs_file_record.selinux is defined
     - iac_fs_selinux_file_rule_exists
