@@ -22,6 +22,7 @@
     semanage fcontext
     -d
     {{ iac_fs_selinux_target }}
+  changed_when: true
   when:
     - iac_fs_file_record.selinux is defined
     - iac_fs_selinux_file_rules.stdout is search('^' ~ (iac_fs_selinux_target | regex_escape) ~ '\\s+', multiline=True)
