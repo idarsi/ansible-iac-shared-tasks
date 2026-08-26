@@ -21,9 +21,18 @@
   when: iac_ansible_report | default(false)
 
 - name: "Adding log to task-report"
-  ansible.builtin.shell: >
-    echo "{{ ansible_date_time.iso8601 }} {{ ansible_facts['ssh_user'] | default(lookup('env', 'USER')) }} {{ iac_service_name }} {{ iac_log_write }}" \
-    >> {{ iac_ansible_report_tasks_path }}
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/tee
+      - -a
+      - "{{ iac_ansible_report_tasks_path }}"
+  args:
+    stdin: >-
+      {{ ansible_date_time.iso8601 }}
+      {{ ansible_facts['ssh_user'] | default(lookup('env', 'USER')) }}
+      {{ iac_service_name }}
+      {{ iac_log_write }}
+    stdin_add_newline: true
   register: iac_log_write_output
   changed_when: false
   failed_when: iac_log_write_output.rc != 0
