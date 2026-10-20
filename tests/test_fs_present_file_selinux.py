@@ -8,6 +8,20 @@ from jinja2 import Environment
 
 
 class FileSelinuxRuleTest(unittest.TestCase):
+    def test_generated_semanage_rule_escapes_dotted_file_path(self):
+        path = "/var/www/selinux.example.org/html/selinux-check.txt"
+        environment = Environment()
+        environment.filters["regex_escape"] = regex_escape
+
+        rule_template = environment.from_string(
+            "{{ path | regex_escape }}"
+        )
+
+        self.assertEqual(
+            rule_template.render(path=path),
+            r"/var/www/selinux\.example\.org/html/selinux\-check\.txt",
+        )
+
     def test_semanage_output_with_file_path_and_trailing_space_matches(self):
         path = "/var/www/selinux.example.org/html/selinux-check.txt"
         setype = "httpd_sys_content_t"

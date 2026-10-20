@@ -53,22 +53,28 @@
   when: iac_fs_file_record.selinux is defined
 
 - name: "Adding SELinux fcontext rule for file"
-  ansible.builtin.command: >-
-    semanage fcontext
-    -a
-    -t {{ iac_fs_file_record.selinux.setype }}
-    {{ iac_fs_file_record.path }}
+  ansible.builtin.command:
+    argv:
+      - semanage
+      - fcontext
+      - -a
+      - -t
+      - "{{ iac_fs_file_record.selinux.setype }}"
+      - "{{ iac_fs_file_record.path | regex_escape }}"
   changed_when: true
   when:
     - iac_fs_file_record.selinux is defined
     - not iac_fs_selinux_file_rule_exists
 
 - name: "Modifying SELinux fcontext rule for file"
-  ansible.builtin.command: >-
-    semanage fcontext
-    -m
-    -t {{ iac_fs_file_record.selinux.setype }}
-    {{ iac_fs_file_record.path }}
+  ansible.builtin.command:
+    argv:
+      - semanage
+      - fcontext
+      - -m
+      - -t
+      - "{{ iac_fs_file_record.selinux.setype }}"
+      - "{{ iac_fs_file_record.path | regex_escape }}"
   changed_when: true
   when:
     - iac_fs_file_record.selinux is defined
