@@ -39,14 +39,14 @@
     iac_fs_selinux_file_rule_exists: >-
       {{
         iac_fs_selinux_file_rules.stdout is search(
-          '^' ~ (iac_fs_file_record.path | regex_escape) ~ '\\s+',
+          '^' ~ (iac_fs_file_record.path | regex_escape) ~ '[ \\t]+',
           multiline=True
         )
       }}
     iac_fs_selinux_file_rule_matches: >-
       {{
         iac_fs_selinux_file_rules.stdout is search(
-          '^' ~ (iac_fs_file_record.path | regex_escape) ~ '\\s+.*' ~ (iac_fs_file_record.selinux.setype | regex_escape) ~ '.*$',
+          '^' ~ (iac_fs_file_record.path | regex_escape) ~ '[ \\t]+.*' ~ (iac_fs_file_record.selinux.setype | regex_escape) ~ '.*$',
           multiline=True
         )
       }}
