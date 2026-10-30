@@ -28,7 +28,7 @@
       - "{{ iac_ansible_report_tasks_path }}"
   args:
     stdin: >-
-      {{ ansible_date_time.iso8601 }}
+      {{ ansible_facts['date_time']['iso8601'] }}
       {{ ansible_facts['ssh_user'] | default(lookup('env', 'USER')) }}
       {{ iac_service_name }}
       {{ iac_log_write }}
